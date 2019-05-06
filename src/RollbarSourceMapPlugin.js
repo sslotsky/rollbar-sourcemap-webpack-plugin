@@ -90,41 +90,59 @@ class RollbarSourceMapPlugin {
   }
 
   uploadSourceMap(compilation, { sourceFile, sourceMap }, cb) {
-    !this.silent &&
-      console.info(`Attempting to upload ${sourceMap} to Rollbar`);
-    let timeElapsed = 0;
-    const timeout = 2000;
-    const interval = setInterval(() => {
-      if (!this.silent) {
-        console.info(`Attempting to upload ${sourceMap} to Rollbar`);
-        console.info(`Time elapsed: ${timeElapsed / 1000} seconds`);
-      }
-      timeElapsed += timeout;
-    }, timeout);
+    //!this.silent &&
+    //  console.info(`Attempting to upload ${sourceMap} to Rollbar`);
+    //let timeElapsed = 0;
+    //const timeout = 2000;
+    //const interval = setInterval(() => {
+    //  if (!this.silent) {
+    //    console.info(`Attempting to upload ${sourceMap} to Rollbar`);
+    //    console.info(`Time elapsed: ${timeElapsed / 1000} seconds`);
+    //  }
+    //  timeElapsed += timeout;
+    //}, timeout);
 
-    const req = request.post(this.rollbarEndpoint, (err, res, body) => {
-      clearInterval(interval);
-      if (!err && res.statusCode === 200) {
-        if (!this.silent) {
-          console.info(`Uploaded ${sourceMap} to Rollbar`); // eslint-disable-line no-console
+    const req = request.post(
+      this.rollbarEndpoint,
+      { timeout: 10000 },
+      (err, res, body) => {
+        if (err && err.code === "ETIMEDOUT" && !this.silent) {
+          if (err.connect === true) {
+            console.log(`A connection timeout occured for ${sourceMap}`);
+          }
         }
-        return cb();
-      }
 
-      const errMessage = `failed to upload ${sourceMap} to Rollbar`;
-      if (err) {
-        return cb(new VError(err, errMessage));
-      }
+        //clearInterval(interval);
+        if (!err && res.statusCode === 200) {
+          if (!this.silent) {
+            console.info(`Uploaded ${sourceMap} to Rollbar`); // eslint-disable-line no-console
+          }
+          return cb();
+        }
 
-      try {
-        const { message } = JSON.parse(body);
-        return cb(
-          new Error(message ? `${errMessage}: ${message}` : errMessage)
-        );
-      } catch (parseErr) {
-        return cb(new VError(parseErr, errMessage));
+        const errMessage = `failed to upload ${sourceMap} to Rollbar`;
+        if (err) {
+          if (err.code === "ETIMEDOUT") {
+            console.log("There was a timeout error");
+            if (err.connect === true) {
+              console.log(
+                `Unable to connect while attempting to upload ${sourceMap}`
+              );
+            }
+          }
+          return cb(new VError(err, errMessage));
+        }
+
+        try {
+          const { message } = JSON.parse(body);
+          return cb(
+            new Error(message ? `${errMessage}: ${message}` : errMessage)
+          );
+        } catch (parseErr) {
+          return cb(new VError(parseErr, errMessage));
+        }
       }
-    });
+    );
 
     const form = req.form();
     form.append("access_token", this.accessToken);

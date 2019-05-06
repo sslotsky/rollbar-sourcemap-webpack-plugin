@@ -150,19 +150,26 @@ var RollbarSourceMapPlugin = function () {
       var sourceFile = _ref2.sourceFile,
           sourceMap = _ref2.sourceMap;
 
-      !this.silent && console.info("Attempting to upload " + sourceMap + " to Rollbar");
-      var timeElapsed = 0;
-      var timeout = 2000;
-      var interval = setInterval(function () {
-        if (!_this2.silent) {
-          console.info("Attempting to upload " + sourceMap + " to Rollbar");
-          console.info("Time elapsed: " + timeElapsed / 1000 + " seconds");
-        }
-        timeElapsed += timeout;
-      }, timeout);
+      //!this.silent &&
+      //  console.info(`Attempting to upload ${sourceMap} to Rollbar`);
+      //let timeElapsed = 0;
+      //const timeout = 2000;
+      //const interval = setInterval(() => {
+      //  if (!this.silent) {
+      //    console.info(`Attempting to upload ${sourceMap} to Rollbar`);
+      //    console.info(`Time elapsed: ${timeElapsed / 1000} seconds`);
+      //  }
+      //  timeElapsed += timeout;
+      //}, timeout);
 
-      var req = _request2.default.post(this.rollbarEndpoint, function (err, res, body) {
-        clearInterval(interval);
+      var req = _request2.default.post(this.rollbarEndpoint, { timeout: 10000 }, function (err, res, body) {
+        if (err && err.code === "ETIMEDOUT" && !_this2.silent) {
+          if (err.connect === true) {
+            console.log("A connection timeout occured for " + sourceMap);
+          }
+        }
+
+        //clearInterval(interval);
         if (!err && res.statusCode === 200) {
           if (!_this2.silent) {
             console.info("Uploaded " + sourceMap + " to Rollbar"); // eslint-disable-line no-console
@@ -172,6 +179,12 @@ var RollbarSourceMapPlugin = function () {
 
         var errMessage = "failed to upload " + sourceMap + " to Rollbar";
         if (err) {
+          if (err.code === "ETIMEDOUT") {
+            console.log("There was a timeout error");
+            if (err.connect === true) {
+              console.log("Unable to connect while attempting to upload " + sourceMap);
+            }
+          }
           return cb(new _verror2.default(err, errMessage));
         }
 
