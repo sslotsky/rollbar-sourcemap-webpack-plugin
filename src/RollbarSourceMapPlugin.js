@@ -1,11 +1,11 @@
-import async from 'async';
-import request from 'request';
-import VError from 'verror';
-import find from 'lodash.find';
-import reduce from 'lodash.reduce';
-import isString from 'lodash.isstring';
-import { handleError, validateOptions } from './helpers';
-import { ROLLBAR_ENDPOINT } from './constants';
+import async from "async";
+import request from "request";
+import VError from "verror";
+import find from "lodash.find";
+import reduce from "lodash.reduce";
+import isString from "lodash.isstring";
+import { handleError, validateOptions } from "./helpers";
+import { ROLLBAR_ENDPOINT } from "./constants";
 
 class RollbarSourceMapPlugin {
   constructor({
@@ -34,7 +34,7 @@ class RollbarSourceMapPlugin {
       return cb();
     }
 
-    this.uploadSourceMaps(compilation, (err) => {
+    this.uploadSourceMaps(compilation, err => {
       if (err) {
         if (!this.ignoreErrors) {
           compilation.errors.push(...handleError(err));
@@ -48,9 +48,12 @@ class RollbarSourceMapPlugin {
 
   apply(compiler) {
     if (compiler.hooks) {
-      compiler.hooks.afterEmit.tapAsync('after-emit', this.afterEmit.bind(this));
+      compiler.hooks.afterEmit.tapAsync(
+        "after-emit",
+        this.afterEmit.bind(this)
+      );
     } else {
-      compiler.plugin('after-emit', this.afterEmit.bind(this));
+      compiler.plugin("after-emit", this.afterEmit.bind(this));
     }
   }
 
@@ -58,24 +61,25 @@ class RollbarSourceMapPlugin {
     const { includeChunks } = this;
     const { chunks } = compilation.getStats().toJson();
 
-    return reduce(chunks, (result, chunk) => {
-      const chunkName = chunk.names[0];
-      if (includeChunks.length && includeChunks.indexOf(chunkName) === -1) {
-        return result;
-      }
+    return reduce(
+      chunks,
+      (result, chunk) => {
+        const chunkName = chunk.names[0];
+        if (includeChunks.length && includeChunks.indexOf(chunkName) === -1) {
+          return result;
+        }
 
-      const sourceFile = find(chunk.files, file => /\.js$/.test(file));
-      const sourceMap = find(chunk.files, file => /\.js\.map$/.test(file));
+        const sourceFile = find(chunk.files, file => /\.js$/.test(file));
+        const sourceMap = find(chunk.files, file => /\.js\.map$/.test(file));
 
-      if (!sourceFile || !sourceMap) {
-        return result;
-      }
+        if (!sourceFile || !sourceMap) {
+          return result;
+        }
 
-      return [
-        ...result,
-        { sourceFile, sourceMap }
-      ];
-    }, {});
+        return [...result, { sourceFile, sourceMap }];
+      },
+      {}
+    );
   }
 
   getPublicPath(sourceFile) {
@@ -86,7 +90,20 @@ class RollbarSourceMapPlugin {
   }
 
   uploadSourceMap(compilation, { sourceFile, sourceMap }, cb) {
+    !this.silent &&
+      console.info(`Attempting to upload ${sourceMap} to Rollbar`);
+    let timeElapsed = 0;
+    const timeout = 2000;
+    const interval = setInterval(() => {
+      if (!this.silent) {
+        console.info(`Attempting to upload ${sourceMap} to Rollbar`);
+        console.info(`Time elapsed: ${timeElapsed / 1000} seconds`);
+      }
+      timeElapsed += timeout;
+    }, timeout);
+
     const req = request.post(this.rollbarEndpoint, (err, res, body) => {
+      clearInterval(interval);
       if (!err && res.statusCode === 200) {
         if (!this.silent) {
           console.info(`Uploaded ${sourceMap} to Rollbar`); // eslint-disable-line no-console
@@ -101,19 +118,21 @@ class RollbarSourceMapPlugin {
 
       try {
         const { message } = JSON.parse(body);
-        return cb(new Error(message ? `${errMessage}: ${message}` : errMessage));
+        return cb(
+          new Error(message ? `${errMessage}: ${message}` : errMessage)
+        );
       } catch (parseErr) {
         return cb(new VError(parseErr, errMessage));
       }
     });
 
     const form = req.form();
-    form.append('access_token', this.accessToken);
-    form.append('version', this.version);
-    form.append('minified_url', this.getPublicPath(sourceFile));
-    form.append('source_map', compilation.assets[sourceMap].source(), {
+    form.append("access_token", this.accessToken);
+    form.append("version", this.version);
+    form.append("minified_url", this.getPublicPath(sourceFile));
+    form.append("source_map", compilation.assets[sourceMap].source(), {
       filename: sourceMap,
-      contentType: 'application/json'
+      contentType: "application/json"
     });
   }
 
